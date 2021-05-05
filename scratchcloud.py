@@ -1,8 +1,16 @@
+"""Connects python to scratch with cloud variables"""
+
 import websocketcilent as websocket
 import requests, re, json, multiprocessing, atexit, time, warnings
 
+class IncorrectCredentials(Exception):
+  """An error when the incorrect username or password is entered"""
+  pass
+
 class CloudSession():
-  def __init__(self, projID, username, password): #Initializes the program
+  """Connects python to scratch with cloud variables"""
+  def __init__(self, projID, username, password):
+    """Connects python to scratch with cloud variables"""
     self.projID = projID
     self.username = username
     self.password = password
@@ -12,9 +20,10 @@ class CloudSession():
     self.connect()
     self._loop = multiprocessing.Process(target=self._varLoop)
     self._loop.start() #Runs the cloud loop
-    atexit.register(self._stop) #Makes sure the websocket connection is closed when the program ends
+    atexit.register(self.stop) #Makes sure the websocket connection is closed when the program ends
   
-  def _login(self): #Creates a Session ID from the scratch credentials
+  def _login(self):
+    """Creates a Session ID from the scratch credentials"""
     headers = {
       "x-csrftoken": "a",
       "x-requested-with": "XMLHttpRequest",
@@ -26,10 +35,14 @@ class CloudSession():
       "password": self.password
     })
     request = requests.post('https://scratch.mit.edu/login/', data=data, headers=headers)
-    sessionID = re.search('\"(.*)\"', request.headers['Set-Cookie']).group()
-    return sessionID
+    try:
+      sessionID = re.search('\"(.*)\"', request.headers['Set-Cookie']).group()
+      return sessionID
+    except AttributeError:
+      raise IncorrectCredentials("Incorrect username or password.")
   
-  def connect(self): #Connects to the cloud server
+  def connect(self):
+    """Connects to the cloud server"""
     self.connection = self._ws.connect('wss://clouddata.scratch.mit.edu', cookie='scratchsessionsid='+self._sessionId+';', origin='https://scratch.mit.edu', enable_multithread=True)
     self._sendPacket({
       'method': 'handshake',
@@ -38,16 +51,22 @@ class CloudSession():
     })
     self._handlePacket(self._ws.recv())
   
-  def _sendPacket(self, packet): #Sends a packet to the websocket
+  def _sendPacket(self, packet):
+    """Sends a packet to the websocket"""
     self._ws.send(json.dumps(packet) + '\n')
 
-  def _handlePacket(self, packet): #This bit reads the data from the websocket and turns it into a dictionary
+  def _handlePacket(self, packet):
+    """This bit reads the data from the websocket and turns it into a dictionary"""
     cloudVars = packet.split("\n")[:-1]
     for var in cloudVars:
       varJSON = json.loads(var)
-      self._variables.update({varJSON["name"]: varJSON["value"]})
+      if varJSON["method"] == "ack":
+        pass
+      elif varJSON["method"] == "set":
+        self._variables.update({varJSON["name"]: varJSON["value"]})
   
-  def _varLoop(self): #A loop to keep reciving the cloud variables
+  def _varLoop(self):
+    """A loop to keep reciving the cloud variables"""
     while True:
       if self._ws.connected:
         try:
@@ -56,38 +75,76 @@ class CloudSession():
         except json.JSONDecodeError:
           warnings.warn("Unimplimented Packet: "+packet, SyntaxWarning)
         except:
-          warnings.warn("Unknown error occoured", Warning)
+          pass
       else:
         self.connect()
 
-  def _stop(self): #Closes the connection once the program is finished
+  def stop(self):
+    """Closes the connection once the program is finished"""
     self._loop.terminate()
     self._ws.close()
-  
-  def _validify(self, name): #This bit makes the variable a valid name
-    return "☁ "+name if not name.startswith("☁ ") else name
 
-  def getVar(self, varName): #Gets the variable stated
-    validName = self._validify(varName)
-    try:
-      return self._variables[validName]
-    except:
+  def _checkValid(self, varName, error=True):
+    """Turns an invalid cloud variable name to a valid one"""
+    validName = "☁ "+varName if not varName.startswith("☁ ") else varName
+    if (not validName in self._variables) and error:
       raise ValueError("Could not find variable "+validName[2:])
-  
-  def setVar(self, varName, value): #Sets the variable stated
-    self.getVar(varName)
-    validName = self._validify(varName)
+    return validName
+
+  def _send(self, method, options):
+    """Sends a message to cloud"""
     try:
-      self._sendPacket({
-        "method": "set",
-        "name": validName,
-        "value": str(value),
+      self._sendPacket(dict({
+        "method": method,
         "user": self.username,
         "project_id": str(self.projID)
-      })
+      }, **options))
     except BrokenPipeError:
       self.connect()
       time.sleep(0.1)
-      self.setVar(varName, value)
-    else:
-      self._variables[varName] = value
+      self._send(method, options)
+
+  def getVar(self, varName):
+    """Returns the variable stated"""
+    return self._variables[self._checkValid(varName)]
+  
+  def getVars(self):
+    """Returns all the variables in the project"""
+    myVars = {}
+    for var, val in self._variables.items():
+      myVars.update({var[2:]: val})
+    return myVars
+
+  def setVar(self, varName, value):
+    """Sets the variable stated to a value"""
+    validName = self._checkValid(varName)
+    self._send("set", {"name": validName, "value": str(value)})
+    self._variables[validName] = str(value)
+  
+  def changeVar(self, varName, changeBy):
+    """Changes the variable stated by a value"""
+    validName = self._checkValid(varName)
+    value = float(self.getVar(varName)) + float(changeBy)
+    value = int(value) if int(value) == value else value
+    self._send("set", {"name": validName, "value": str(value)})
+    self._variables[validName] = str(value)
+
+  def createVar(self, varName):
+    """Creates a new variable. Note that it will not edit the online project json so won't work properly"""
+    validName = self._checkValid(varName, error=False)
+    self._send("create", {"name": validName, "value": "0"})
+    self._variables[validName] = "0"
+  
+  def deleteVar(self, varName):
+    """Deletes the variable stated. Note that it will not edit the online project json so won't work properly"""
+    validName = self._checkValid(varName)
+    self._send("delete", {"name": validName})
+    del self._variables[validName]
+
+  def renameVar(self, oldVarName, newVarName):
+    """Renames a variable to the name stated. Note that it will not edit the online project json so won't work properly"""
+    oldValidName = self._checkValid(oldVarName)
+    newValidName = self._checkValid(newVarName, error=False)
+    self._send("rename", {"name": oldValidName, "new_name": newValidName})
+    self._variables[newValidName] = self._variables[oldValidName]
+    del self._variables[oldValidName]
