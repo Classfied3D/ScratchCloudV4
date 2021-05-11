@@ -20,5 +20,5 @@ cloud = scratchcloud.CloudSession(123456789, "username", "password")
 ## Thats it!
 ScratchCloud is designed to be really easy to use
 
-#Credit
-Credit to @PikahuB2005 for help
+# Credit
+Credit to [@PikachuB2005](https://scratch.mit.edu/users/PikachuB2005/) for help
