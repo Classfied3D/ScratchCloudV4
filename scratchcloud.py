@@ -29,7 +29,7 @@ class CloudSession():
       "x-requested-with": "XMLHttpRequest",
       "Cookie": "scratchcsrftoken=a;scratchlanguage=en;",
       "referer": "https://scratch.mit.edu",
-      "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.101 Safari/537.36"
+      "user-agent": ""
     }
     data = json.dumps({
       "username": self.username,
