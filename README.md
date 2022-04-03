@@ -17,7 +17,7 @@ cloud = scratchcloud.CloudSession(123456789, "username", "password")
 * `cloud.deleteVar(name)` -Deletes the variable stated
 * `cloud.renameVar(oldName, newName)` -Renames a variable to the name stated
 
-## Thats it!
+## That's it!
 ScratchCloud is designed to be really easy to use
 
 # Credit
