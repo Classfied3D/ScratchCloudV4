@@ -1,4 +1,4 @@
-# ScratchCloudV4
+# ScratchCloud V4
 A new way to connect to [scratch](https://scratch.mit.edu) cloud variables from [python](https://www.python.com) without node.js
 
 ## Making a program
